@@ -1,3 +1,4 @@
 pandas
 pywhatkit
 streamlit
+pyautogui
