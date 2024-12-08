@@ -4,10 +4,15 @@ import os
 import time
 import sys
 import subprocess
+import pyautogui
 
+# Attempt to install missing dependencies
 def install_dependencies():
     dependencies = [
         'pywhatkit',
+        'pyautogui',
+        'python-xlib',  # for Linux/Mac
+        'pywin32',      # for Windows clipboard support
         'openpyxl'
     ]
     
@@ -21,12 +26,15 @@ def install_dependencies():
 # Check and install dependencies
 try:
     import pywhatkit
+    import pyautogui
 except ImportError:
     st.warning("Missing dependencies. Attempting to install...")
     install_dependencies()
     
+    # Retry imports
     try:
         import pywhatkit
+        import pyautogui
     except ImportError:
         st.error("Failed to install required dependencies. Please install manually.")
         st.stop()
@@ -53,7 +61,6 @@ def send_whatsapp_message(phone_number, message, image_path=None):
             )
         else:
             # Send text message only
-            st.warning("Image sending is not supported in deployment. Sending text message.")
             pywhatkit.sendwhatmsg_instantly(
                 phone_no=formatted_number, 
                 message=message,
@@ -67,7 +74,7 @@ def send_whatsapp_message(phone_number, message, image_path=None):
         return False
 
 def main():
-    st.title("WhatsApp Bulk Message Sender")
+    st.title("WhatsApp Bulk Message Sender (PyWhatKit)")
 
     # Sidebar for configuration
     st.sidebar.header("Configuration")
@@ -79,12 +86,11 @@ def main():
         help="Excel file must contain 'Name' and 'Phone Number' columns"
     )
 
-    # Image file upload (with warning)
-    st.sidebar.warning("Image upload is not supported in deployment.")
+    # Image file upload
     uploaded_image = st.sidebar.file_uploader(
-        "Upload Image (Optional, Not Supported)", 
+        "Upload Image (Optional)", 
         type=['png', 'jpg', 'jpeg'],
-        disabled=True
+        help="Image to send along with the message"
     )
 
     # Message input
@@ -99,6 +105,15 @@ def main():
         # Validate file upload
         if uploaded_file is not None:
             try:
+                # Save uploaded image temporarily if provided
+                image_path = None
+                if uploaded_image:
+                    # Create temp directory if it doesn't exist
+                    os.makedirs('temp', exist_ok=True)
+                    image_path = os.path.join('temp', uploaded_image.name)
+                    with open(image_path, 'wb') as f:
+                        f.write(uploaded_image.getbuffer())
+
                 # Read Excel file
                 df = pd.read_excel(uploaded_file)
                 
@@ -116,6 +131,9 @@ def main():
                 progress_bar = st.progress(0)
                 status_text = st.empty()
 
+                # Flag to check if WhatsApp Web is already open
+                whatsapp_open = False
+
                 # Send messages
                 total_contacts = len(df)
                 for idx, row in df.iterrows():
@@ -123,10 +141,20 @@ def main():
                         # Personalize message
                         personalized_message = message_template.replace("{{Name}}", str(row['Name']))
                         
+                        # Open WhatsApp Web only if it's not already open
+                        if not whatsapp_open:
+                            # Open WhatsApp Web in the first tab
+                            pyautogui.hotkey('ctrl', 't')  # Open new tab
+                            pyautogui.typewrite("https://web.whatsapp.com")  # Navigate to WhatsApp Web
+                            pyautogui.press('enter')
+                            time.sleep(15)  # Wait for WhatsApp Web to load
+                            whatsapp_open = True
+
                         # Send message
                         success = send_whatsapp_message(
                             str(row['Phone Number']), 
-                            personalized_message
+                            personalized_message,
+                            image_path
                         )
 
                         # Update progress
@@ -135,7 +163,13 @@ def main():
                         status_text.text(f"Sending message {idx + 1}/{total_contacts}")
 
                         # Wait between messages to avoid rate limiting
-                        time.sleep(10)
+                        time.sleep(10)  # Adjusted sleep time for smoother operation
+
+                        # Close tab after each message is sent
+                        if success:
+                            pyautogui.hotkey('ctrl', 'w')  # Close current tab
+                            time.sleep(5)  # Allow time for tab to close
+                            # Keep WhatsApp Web open in the same tab for next message
 
                     except Exception as inner_e:
                         st.error(f"Error processing contact {row['Name']}: {inner_e}")
@@ -145,6 +179,11 @@ def main():
 
             except Exception as e:
                 st.error(f"An error occurred: {e}")
+            
+            finally:
+                # Remove temporary image
+                if 'image_path' in locals() and image_path and os.path.exists(image_path):
+                    os.remove(image_path)
 
         else:
             st.error("Please upload an Excel file before sending messages.")
@@ -155,12 +194,13 @@ def main():
     1. Prepare an Excel file with columns:
        - Name
        - Phone Number
-    2. Enter your message template
-    3. Click 'Send Messages'
+    2. Optional: Upload an image to send
+    3. Enter your message template
+    4. Click 'Send Messages'
+    5. IMPORTANT: Keep WhatsApp Web open in your default browser
     
-    Note: This version is deployment-friendly and
-    does NOT support image sending or browser
-    automation.
+    Note: Messages will be sent automatically using PyWhatKit.
+    Ensure phone numbers are for Indian numbers (starting with +91)
     """)
 
 if __name__ == "__main__":
