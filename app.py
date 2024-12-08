@@ -2,12 +2,17 @@ import streamlit as st
 import pandas as pd
 import os
 import time
-import pywhatkit
+import sys
+import subprocess
+import pyautogui
 
 # Attempt to install missing dependencies
 def install_dependencies():
     dependencies = [
         'pywhatkit',
+        'pyautogui',
+        'python-xlib',  # for Linux/Mac
+        'pywin32',      # for Windows clipboard support
         'openpyxl'
     ]
     
@@ -21,6 +26,7 @@ def install_dependencies():
 # Check and install dependencies
 try:
     import pywhatkit
+    import pyautogui
 except ImportError:
     st.warning("Missing dependencies. Attempting to install...")
     install_dependencies()
@@ -28,6 +34,7 @@ except ImportError:
     # Retry imports
     try:
         import pywhatkit
+        import pyautogui
     except ImportError:
         st.error("Failed to install required dependencies. Please install manually.")
         st.stop()
@@ -124,6 +131,9 @@ def main():
                 progress_bar = st.progress(0)
                 status_text = st.empty()
 
+                # Flag to check if WhatsApp Web is already open
+                whatsapp_open = False
+
                 # Send messages
                 total_contacts = len(df)
                 for idx, row in df.iterrows():
@@ -131,6 +141,15 @@ def main():
                         # Personalize message
                         personalized_message = message_template.replace("{{Name}}", str(row['Name']))
                         
+                        # Open WhatsApp Web only if it's not already open
+                        if not whatsapp_open:
+                            # Open WhatsApp Web in the first tab
+                            pyautogui.hotkey('ctrl', 't')  # Open new tab
+                            pyautogui.typewrite("https://web.whatsapp.com")  # Navigate to WhatsApp Web
+                            pyautogui.press('enter')
+                            time.sleep(15)  # Wait for WhatsApp Web to load
+                            whatsapp_open = True
+
                         # Send message
                         success = send_whatsapp_message(
                             str(row['Phone Number']), 
@@ -145,6 +164,12 @@ def main():
 
                         # Wait between messages to avoid rate limiting
                         time.sleep(10)  # Adjusted sleep time for smoother operation
+
+                        # Close tab after each message is sent
+                        if success:
+                            pyautogui.hotkey('ctrl', 'w')  # Close current tab
+                            time.sleep(5)  # Allow time for tab to close
+                            # Keep WhatsApp Web open in the same tab for next message
 
                     except Exception as inner_e:
                         st.error(f"Error processing contact {row['Name']}: {inner_e}")
