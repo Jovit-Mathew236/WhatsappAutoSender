@@ -12,7 +12,7 @@ def install_dependencies():
         'pywhatkit',
         'pyautogui',
         'python-xlib',  # for Linux/Mac
-        'pywin32',      # for Windows clipboard support
+        'pypiwin32',      # for Windows clipboard support
         'openpyxl'
     ]
     
